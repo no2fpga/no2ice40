@@ -1,4 +1,11 @@
 #!/usr/bin/env python3
+#
+# Custom placement script to be executed by nextpnr in the
+# pre-place (post-pack) phase.
+#
+# Copyright (C) 2019-2020 Sylvain Munaut
+# SPDX-License-Identifier: MIT
+#
 
 from collections import namedtuple
 import re

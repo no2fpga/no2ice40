@@ -1,7 +1,14 @@
-iCE40
-=====
+Nitro FPGA misc iCE40 specific cores
+====================================
 
-This contains a collection of utility cores specifically targetting the
+This contains a collection of utility cores specifically targeting the
 lattice iCE40 FPGA family.
 
-These cores are licensed under the BSD 3-clause licence (see LICENSE.bsd)
+
+License
+-------
+
+The cores in this repository are licensed under the
+"CERN Open Hardware Licence Version 2 - Permissive" license.
+
+See LICENSE file for full text.

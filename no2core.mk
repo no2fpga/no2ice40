@@ -2,6 +2,7 @@ CORE := no2ice40
 
 RTL_SRCS_no2ice40 := $(addprefix rtl/, \
 	ice40_ebr.v \
+	ice40_i2c_wb.v \
 	ice40_rgb_wb.v \
 	ice40_spi_wb.v \
 	ice40_spram_gen.v \

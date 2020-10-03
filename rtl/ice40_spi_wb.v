@@ -50,6 +50,10 @@ module ice40_spi_wb #(
 	input  wire        wb_cyc,
 	output wire        wb_ack,
 
+	// Aux signals
+	output wire irq,
+	output wire wakeup,
+
 	// Common
 	input  wire clk,
 	input  wire rst
@@ -64,8 +68,6 @@ module ice40_spi_wb #(
 	wire       sb_rw;
 	wire       sb_stb;
 	wire       sb_ack;
-	wire       sb_irq;
-	wire       sb_wkup;
 
 	wire [3:0] sio_csn_o_i;
 	wire [3:0] sio_csn_oe_i;
@@ -110,8 +112,8 @@ module ice40_spi_wb #(
 		.SBDATO1 (sb_do[1]),
 		.SBDATO0 (sb_do[0]),
 		.SBACKO  (sb_ack),
-		.SPIIRQ  (sb_irq),
-		.SPIWKUP (sb_wkup),
+		.SPIIRQ  (irq),
+		.SPIWKUP (wakeup),
 		.SO      (sio_miso_o),
 		.SOE     (sio_miso_oe),
 		.MO      (sio_mosi_o),

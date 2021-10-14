@@ -80,7 +80,7 @@ module ice40_serdes_crg #(
 		if (NO_CLOCK_2X)
 			assign clk_2x = 1'b0;
 		else
-			(* BEL="X13/Y0/gb" *)
+//			(* BEL="X13/Y0/gb" *)
 			SB_GB gbuf_2x_I (
 				.USER_SIGNAL_TO_GLOBAL_BUFFER(clk_div[0]),
 				.GLOBAL_BUFFER_OUTPUT(clk_2x)
@@ -88,7 +88,7 @@ module ice40_serdes_crg #(
 	endgenerate
 
 	// Buffer clk_1x
-	(* BEL="X12/Y0/gb" *)
+//	(* BEL="X12/Y0/gb" *)
 	SB_GB gbuf_1x_I (
 		.USER_SIGNAL_TO_GLOBAL_BUFFER(clk_div[1]),
 		.GLOBAL_BUFFER_OUTPUT(clk_1x)

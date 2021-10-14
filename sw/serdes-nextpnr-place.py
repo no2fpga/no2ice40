@@ -62,6 +62,9 @@ class BEL(namedtuple('BEL', 'x y z')):
 			return int(re.sub(r'[^\d-]+', '', s))
 		return kls(*[to_int(x) for x in v.split('/', 3)])
 
+	def distance(self, ob):
+		return abs(self.x - ob.x) + abs(self.y - ob.y)
+
 
 class ControlGroup(namedtuple('ControlGroup', 'clk rst ena neg')):
 
@@ -245,7 +248,8 @@ class Placer:
 	]
 
 	PLACE_PREF = [
-		# Xofs Yofs
+		# Uofs Vofs
+		# (U is parallel to IO bank direction, V is perpendicular)
 		( 0,  1),
 		(-1,  1),
 		( 1,  1),
@@ -268,21 +272,19 @@ class Placer:
 		( 1,  4),
 	]
 
-	def __init__(self, groups, top=False):
+	def __init__(self, groups):
 		# Save groups to place
 		self.groups = groups
 
 		# Generate site grid
-		self.top = top
 		self.m_fwd  = {}
 		self.m_back = {}
 
-		for y in (range(26,31) if self.top else range(1,6)):
-			for x in range(1,25):
-				# Invalid, used by SPRAM
-				if x in [6,19]:
-					continue
-				self.m_fwd[BEL(x,y,0)] = PlacerSite(BEL(x,y, 0))
+		for bel_name in ctx.getBels():
+			if not bel_name.endswith('/lc0'):
+				continue
+			bel = BEL.from_json_attr(bel_name)
+			self.m_fwd[bel] = PlacerSite(bel)
 
 	def _blocks_by_type(self, typ):
 		r = []
@@ -309,11 +311,31 @@ class Placer:
 					tgt = BEL(x, y, 0)
 
 				# Scan placement preference and try to place
-				for xofs, yofs in self.PLACE_PREF:
-					# Flip for top
-					if self.top:
-						yofs = -yofs
+				for uofs, vofs in self.PLACE_PREF:
+					# Convert U/V to X/Y depending on IO bank
+					io = blk.group.io
 
+					if io.x == 0:
+						# Left
+						xofs = vofs
+						yofs = uofs
+
+					elif io.y == 0:
+						# Bottom
+						xofs = uofs
+						yofs = vofs
+
+					elif io.x > io.y:
+						# Right
+						xofs = -vofs
+						yofs = -uofs
+
+					else:
+						# Top
+						xofs = -uofs
+						yofs = -vofs
+
+					# Apply offset and check if it's valid
 					p = BEL(tgt.x + xofs, tgt.y + yofs, 0)
 
 					if (p in self.m_fwd) and (self.m_fwd[p].valid_for_block(blk)):
@@ -353,9 +375,15 @@ debug = True
 # -------
 
 groups = {}
-sync_lbuf_net_map = {}
-sync_lbuf_top = {}
-sync_lbuf_bot = {}
+
+	# Maps PLB to sync_nets (all those nets are equivalent but duplicated by
+	# different LCs in the PLB for better routing to the local buffer)
+sync_lbuf_plb2nets = {}
+
+	# Maps each PLB to a list of ( BEL, net ), each corresponding to a
+	# local buffer position and its output.
+sync_lbuf_plb2bufs = {}
+
 
 for n,c in ctx.cells:
 	# Filter out dummy 'BEL' attributes
@@ -370,20 +398,14 @@ for n,c in ctx.cells:
 
 		# Local sync buffer
 		if attr.startswith('sync_lbuf'):
-			# Position
-			if attr.endswith('top'):
-				d = sync_lbuf_top
-			elif attr.endswith('bot'):
-				d = sync_lbuf_bot
-
 			# Sync source
 			src_net = c.ports['I0'].net
 			src_plb = BEL.from_json_attr(src_net.driver.cell.attrs['BEL'])[0:2]
 			dst_net = c.ports['O'].net
 
 			# Collect
-			sync_lbuf_net_map.setdefault(src_plb, []).append(src_net.name)
-			d[src_plb] = dst_net.name
+			sync_lbuf_plb2nets.setdefault(src_plb, []).append(src_net.name)
+			sync_lbuf_plb2bufs.setdefault(src_plb, []).append( (BEL.from_json_attr(c.attrs['BEL']), dst_net.name) )
 
 	# Does the cell need grouping ?
 	if 'SERDES_GRP' in c.attrs:
@@ -404,21 +426,18 @@ for n,c in ctx.cells:
 		groups[fcid.gid].add_lc(c, fcid=fcid)
 
 
-# Analyze and split into top/bottom
-# ---------------------------------
-
-groups_top = []
-groups_bot = []
+# Analyze groups
+# --------------
 
 for g in groups.values():
-	# Analyze
 	g.analyze()
 
-	# Sort
-	if g.io.y == 0:
-		groups_bot.append(g)
-	else:
-		groups_top.append(g)
+
+# Execute placer
+# --------------
+
+placer = Placer(groups.values())
+placer.place()
 
 
 # Process local buffers
@@ -431,37 +450,26 @@ def lbuf_build_map(src_net_map, dst_net_map):
 			rv[n] = v
 	return rv
 
+
 def lbuf_reconnect(net_map, cells):
 	# Scan all cells
 	for lc in cells:
 		# Scan all ports
 		for pn in ['I0', 'I1', 'I2', 'I3', 'CEN']:
 			n = lc.ports[pn].net
+			cb = BEL.from_json_attr(lc.attrs['BEL'])
 			if (n is not None) and (n.name in net_map):
+				# Find closest buffers
+				print(cb, sorted(net_map[n.name], key=lambda x: cb.distance(x[0])))
+				nn = sorted(net_map[n.name], key=lambda x: cb.distance(x[0]))[0][1]
+
 				# Reconnect
 				ctx.disconnectPort(lc.name, pn)
-				ctx.connectPort(net_map[n.name], lc.name, pn)
+				ctx.connectPort(nn, lc.name, pn)
 
 
-sync_lbuf_top = lbuf_build_map(sync_lbuf_net_map, sync_lbuf_top)
-sync_lbuf_bot = lbuf_build_map(sync_lbuf_net_map, sync_lbuf_bot)
+sync_lbuf = lbuf_build_map(sync_lbuf_plb2nets, sync_lbuf_plb2bufs)
 
-for g in groups_top:
+for g in groups.values():
 	for blk in g.blocks.values():
-		lbuf_reconnect(sync_lbuf_top, blk.lcs)
-
-for g in groups_bot:
-	for blk in g.blocks.values():
-		lbuf_reconnect(sync_lbuf_bot, blk.lcs)
-
-
-# Execute placer
-# --------------
-
-if groups_top:
-	p_top = Placer(groups_top, top=True)
-	p_top.place()
-
-if groups_bot:
-	p_bot = Placer(groups_bot, top=False)
-	p_bot.place()
+		lbuf_reconnect(sync_lbuf, blk.lcs)

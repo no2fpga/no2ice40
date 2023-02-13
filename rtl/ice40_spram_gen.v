@@ -134,15 +134,15 @@ module ice40_spram_gen #(
 
 			assign mem_wren[y] = mem_sel[y] &  wr_ena;
 			assign mem_ce[y]   = mem_sel[y] & (wr_ena | rd_ena);
-
-			// Muxing
-			if (MSW == 0)
-				// Trivial case
-				assign mem_do_w = mem_do_m[0];
-			else
-				// Read side mux
-				assign mem_do_w = mem_do_m[addr_r[AL:AL-MSW+1]];
 		end
+
+		// Muxing
+		if (MSW == 0)
+			// Trivial case
+			assign mem_do_w = mem_do_m[0];
+		else
+			// Read side mux
+			assign mem_do_w = mem_do_m[addr_r[AL:AL-MSW+1]];
 	endgenerate
 
 endmodule
